@@ -10,10 +10,14 @@ import matplotlib.pyplot as plt
 model = joblib.load('model.pkl')
 
 # Load the test data
-X_test = pd.read_csv('test_data.csv')
+X_test = pd.read_csv('Customer Churn.csv')
 
-# (Optional) If you have separate labels
-y_test = pd.read_csv('test_labels.csv')
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+X_test = scaler.fit_transform(X_test)
+
+predictions = model.predict(X_test)
+print(predictions)
 
 # Initialize SHAP Explainer
 explainer = shap.TreeExplainer(model)
