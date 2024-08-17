@@ -1,11 +1,18 @@
 import streamlit as st
 import shap
+import os
 import joblib
 import pandas as pd
 import matplotlib.pyplot as plt
 
 # Load the model
-model = joblib.load('model.pkl')
+model = joblib.load('path/to/model.pkl')
+
+model_path = 'model.pkl'
+if os.path.exists(model_path):
+    model = joblib.load(model_path)
+else:
+    st.error("Model file not found. Please ensure 'model.pkl' is in the correct directory.")
 
 # Load the test data
 X_test = pd.read_csv('Customer Churn.csv')
