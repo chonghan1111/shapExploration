@@ -1,60 +1,91 @@
 import streamlit as st
 import shap
-import os
-import joblib
 import pandas as pd
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
 import matplotlib.pyplot as plt
+from streamlit_shap import st_shap
 
-# Load the model
-model = joblib.load('path/to/model.pkl')
+# Load the dataset (assuming it's in the same directory)
+customer = pd.read_csv("telecom_churn.csv")
 
-model_path = 'model.pkl'
-if os.path.exists(model_path):
-    model = joblib.load(model_path)
-else:
-    st.error("Model file not found. Please ensure 'model.pkl' is in the correct directory.")
+# Preprocessing
+X = customer.drop("Churn", axis=1)
+y = customer.Churn
 
-# Load the test data
-X_test = pd.read_csv('Customer Churn.csv')
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=1)
 
-from sklearn.preprocessing import StandardScaler
-scaler = StandardScaler()
-X_test = scaler.fit_transform(X_test)
+# Model training
+clf = RandomForestClassifier()
+clf.fit(X_train, y_train)
 
-predictions = model.predict(X_test)
-print(predictions)
+# Make predictions
+y_pred = clf.predict(X_test)
 
-# Initialize SHAP Explainer
-explainer = shap.TreeExplainer(model)
-
-# Calculate SHAP values
+# SHAP explainer
+explainer = shap.TreeExplainer(clf)
 shap_values = explainer.shap_values(X_test)
 
-# Streamlit App
-st.title("SHAP Streamlit App")
+# Streamlit app
+st.title("SHAP Analysis for Customer Churn")
 
-#Summary Plot:
-st.title("SHAP Summary Plot")
-st.write("This plot shows the overall feature importance and their impact on predictions.")
-shap.summary_plot(shap_values, X_test)
-st.pyplot(bbox_inches='tight')
+# Part 1: General SHAP Analysis
+st.header("Part 1: General SHAP Analysis")
+st.dataframe(classification_report(y_pred, y_test,output_dict=True))
 
-#Force Plot:
-st.title("SHAP Force Plot")
-selected_index = st.selectbox("Select a data point for Force Plot analysis", X_test.index)
-st.write(f"Force plot for data point: {selected_index}")
-shap.force_plot(explainer.expected_value[1], shap_values[1][selected_index, :], X_test.iloc[selected_index, :])
+# Summary plot
+st.subheader("Summary Plot")
+fig, ax = plt.subplots()
+shap.summary_plot(shap_values, X_test, show=False)
+st.pyplot(fig)
 
-#Decision Plot:
-st.title("SHAP Decision Plot")
-st.write("This plot visualizes the decision path of features for a given instance.")
-shap.decision_plot(explainer.expected_value[1], shap_values[1][selected_index, :], X_test.iloc[selected_index, :])
+# Summary plot for class 0
+st.subheader("Summary Plot for Class 0")
+fig, ax = plt.subplots()
+shap.summary_plot(shap_values[0], X_test, show=False)
+st.pyplot(fig)
 
-#Interective Elements:
-st.title("Interactive Feature Adjustment")
-feature_to_adjust = st.selectbox("Select a feature to adjust", X_test.columns)
-new_value = st.slider(f"Adjust {feature_to_adjust}", float(X_test[feature_to_adjust].min()), float(X_test[feature_to_adjust].max()), float(X_test[feature_to_adjust].mean()))
-X_test_copy = X_test.copy()
-X_test_copy.loc[selected_index, feature_to_adjust] = new_value
-new_shap_values = explainer.shap_values(X_test_copy)
-shap.force_plot(explainer.expected_value[1], new_shap_values[1][selected_index, :], X_test_copy.iloc[selected_index, :])
+# Part 2: Individual Input Prediction & Explanation
+st.header("Part 2: Individual Input Prediction & Explanation")
+
+# Input fields for features
+input_data = {}
+for feature in X.columns:
+    if feature in ['AccountWeeks', 'ContractRenewal', 'DataPlan', 'DataUsage',
+       'CustServCalls', 'DayMins', 'DayCalls', 'MonthlyCharge', 'OverageFee',
+       'RoamMins']:
+        input_data[feature] = st.number_input(f"Enter {feature}:", value=int(X_test[feature].mean()), step=1)
+    else:  # For other features, keep the original input type
+        input_data[feature] = st.number_input(f"Enter {feature}:", value=X_test[feature].mean())
+
+
+# Create a DataFrame from input data
+input_df = pd.DataFrame(input_data, index=[0])
+
+# Make prediction
+prediction = clf.predict(input_df)[0]
+probability = clf.predict_proba(input_df)[0][1]  # Probability of churn
+
+# Display prediction
+st.write(f"**Prediction:** {'Churn' if prediction == 1 else 'No Churn'}")
+st.write(f"**Churn Probability:** {probability:.2f}")
+
+# SHAP explanation for the input
+shap_values_input = explainer.shap_values(input_df)
+
+
+# Force plot
+st.subheader("Force Plot for class 0")
+st_shap(shap.force_plot(explainer.expected_value[0], shap_values_input[0], input_df), height=400, width=1000)
+
+# st.write(input_df)
+# st.pyplot(fig,bbox_inches='tight')
+
+# Decision plot
+st.subheader("Decision Plot for class 0")
+
+st_shap(shap.decision_plot(explainer.expected_value[0], shap_values_input[0], X_test.columns))
+# st.pyplot(fig)
